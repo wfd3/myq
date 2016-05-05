@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"flag"
+	"github.com/rakyll/globalconf"
 )
 
 func usage() {
@@ -31,11 +32,12 @@ func main() {
 	var err error
 	var username, password string
 	var debug, machine_parsable bool
+	var conf *globalconf.GlobalConf
 
 	flag.Usage = usage
 	
-	flag.StringVar(&username, "u", "", "Username")
-	flag.StringVar(&password, "p", "", "Password")
+	flag.StringVar(&username, "user", "", "Username")
+	flag.StringVar(&password, "password", "", "Password")
 	flag.BoolVar(&debug, "D", false, "Debugging enabled")
 	flag.BoolVar(&machine_parsable, "M", false, "Machine parsable output")
 
@@ -50,6 +52,15 @@ func main() {
 		usage()
 		os.Exit(0)
 	}
+
+	// read confg
+	if conf, err = globalconf.New("myqt"); err != nil {
+		fmt.Printf("Error: %s\n", err)
+		os.Exit(1)
+	}
+	conf.ParseAll()
+	
+	
 
 	if err := m.New(username, password, debug, machine_parsable); err != nil {
 		fmt.Printf("Error: %s\n", err);
