@@ -19,16 +19,6 @@ var _Culture string = "en-US"
 var _BaseURL = "https://www.myliftmaster.com/"
 var _BrandName = "LiftMaster"
 
-// Current states (ie, the door is currently closed)
-const (
-	Doorstate_UNKNOWN = -1
-	Doorstate_Open    = 1
-	Doorstate_Closed  = 2
-	Doorstate_Stopped = 3
-	Doorstate_Opening = 4
-	Doorstate_Closing = 5
-)
-
 // Desired state (ie, I want the door to open)
 const (
 	DesiredState_Closed = 0
@@ -72,7 +62,7 @@ type triggerStateChangeReturn struct {
 // There's something odd about this JSON structure. I don't understand
 // why PlacesList needs to be a structure, rather than just a type
 // []Places.  As a workaround, I've defined two structures, the actual
-// JSON->Go representation, and a "shadow" type to allow range()
+// JSON->Go representation, and a "shadow" type (type places) to allow range()
 // operations to work as expected.  getAllGateways() converts from one
 // to the other.
 type placeList struct {		// This is the JSON representation
@@ -99,35 +89,36 @@ type MyQ struct {
 	applicationId string
 	devices devices
 	locations places
-	inProgress bool
 	debug bool
 	machineReadable bool
 }
 
 // Helpers
 
-func (f *MyQ) debugf(format string, a ...interface{}) (n int, err error) {
-	if f.debug {
+func (m *MyQ) debugf(format string, a ...interface{}) (n int, err error) {
+	if m.debug {
+		format = "# " + format
 		return fmt.Fprintf(os.Stderr, format, a...)
 	}
 	return 0, nil
 }
 
-func (f *MyQ) doGet(rawurl string, v url.Values, s interface{}) (err error) {
+// Do a HTTPS GET and parse the JSON response
+func (m *MyQ) doGet(rawurl string, v url.Values, s interface{}) (err error) {
 	var r []byte
 	var res *http.Response
 
 	u, _ := url.Parse(rawurl)
 	u.RawQuery = v.Encode()
-	f.debugf("doGet():  URL -  %s\n", u.String())
+	m.debugf("doGet():  URL -  %s\n", u.String())
 
 	t := time.Now()
-	if res, err = f.c.Get(u.String()); err != nil {
-		f.debugf("Get() failed: %s\n", err)
+	if res, err = m.c.Get(u.String()); err != nil {
+		m.debugf("Get() failed: %s\n", err)
 		return err
 	}
 	d := time.Since(t)
-	f.debugf("   HTTP Response: %s, in %s\n", res.Status, d)
+	m.debugf("   HTTP Response: %s, in %s\n", res.Status, d)
 	if res.StatusCode != http.StatusOK {
 		return errors.New(res.Status)
 	}
@@ -135,27 +126,28 @@ func (f *MyQ) doGet(rawurl string, v url.Values, s interface{}) (err error) {
 	res.Body.Close()
 
 	if err != nil { 
-		f.debugf("ReadAll() failed: %s\n", err)
+		m.debugf("ReadAll() failed: %s\n", err)
 		return err
 	}
 	return json.Unmarshal(r, &s)
 }
 
-func (f *MyQ) doPostRaw(rawurl string, v url.Values) (res *http.Response,
+// Do a HTTPS POST but don't try to JSON-parse the result.
+func (m *MyQ) doPostRaw(rawurl string, v url.Values) (res *http.Response,
 	err error) {
 
-	if f.debug {
+	if m.debug {
 		u, _ := url.Parse(rawurl)
 		u.RawQuery = v.Encode()
-		f.debugf("doPost(): URL - %s\n", u)
+		m.debugf("doPost(): URL - %s\n", u)
 	}
 	t := time.Now()
-	if res, err = f.c.PostForm(rawurl, v); err != nil {
-		f.debugf("Post() failed: %s\n", err)
+	if res, err = m.c.PostForm(rawurl, v); err != nil {
+		m.debugf("Post() failed: %s\n", err)
 		return nil, err
 	}
 	d := time.Since(t)
-	f.debugf("   HTTP Response: %s, in %s\n", res.Status, d)
+	m.debugf("   HTTP Response: %s, in %s\n", res.Status, d)
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP Error: %s", res.Status)
 	}
@@ -163,10 +155,11 @@ func (f *MyQ) doPostRaw(rawurl string, v url.Values) (res *http.Response,
 	return res, nil
 }
 
-func (f *MyQ) doPost(rawurl string, v url.Values, s interface{}) (err error) {
+// Do a HTTPS POST and unmarshal the JSON result (wrapper around doPostRaw)
+func (m *MyQ) doPost(rawurl string, v url.Values, s interface{}) (err error) {
 	var res *http.Response
-	
-	if res, err = f.doPostRaw(rawurl, v); err != nil {
+
+	if res, err = m.doPostRaw(rawurl, v); err != nil {
 		return err
 	}
 	r, err := ioutil.ReadAll(res.Body)
@@ -175,116 +168,138 @@ func (f *MyQ) doPost(rawurl string, v url.Values, s interface{}) (err error) {
 	return json.Unmarshal(r, &s)
 }
 
+// Functions to handle type place
+func (p *place) print(machinereadable bool) string {
+	if machinereadable {
+	return fmt.Sprintf("%s,%d", p.Name, p.Gatewayid)
+	} 
+	return fmt.Sprintf("%s (ID %d)", p.Name, p.Gatewayid)
+}
+
+func (p *place) string() string {
+	return p.print(false)
+}
+
+// Functions to handle type Device
+func (d Device) print(machinereadable bool) string {
+	var s string
+	
+	d.Lastupdateddatetime = d.Lastupdateddatetime.Local()
+	if machinereadable {
+		s = fmt.Sprintf("%s,%s,%d,%s,%d,%s,%s", d.Name, d.location,
+			d.Myqdeviceid, d.Statename,
+			d.Lastupdateddatetime.Unix(), d.Errorstatus,
+			d.Errormessage)
+		if d.Monitoronly {
+			s += ",Monitor"
+		}
+		if d.Lowbattery {
+			s += ",LowBat"
+		}
+		if d.Sensorerror {
+			s += ",SensorErr"
+		}
+		if d.Openerror {
+			s += ",OpenErr"
+		}
+		if d.Closeerror {
+			s += ",CloseErr"
+		}
+		if d.Disablecontrol {
+			s += ",Disabled"
+		}
+	} else {
+		s = fmt.Sprintf("%s at %s is %s since %s",
+			d.Name, d.location, d.Statename,
+			d.Lastupdateddatetime.Format(time.UnixDate))
+		if d.Error {
+			s += fmt.Sprintf(", ERROR: status = %s, message = %s", 
+				d.Errorstatus, d.Errormessage)
+		}
+		if d.Monitoronly {
+			s += ",Monitor Only"
+		}
+		if d.Lowbattery {
+			s += ", LowBat"
+		}
+		if d.Sensorerror {
+			s += ", Sensor Error"
+		}
+		if d.Openerror {
+			s += ", Open Error"
+		}
+		if d.Closeerror {
+			s += ", Close Error"
+		}
+		if d.Disablecontrol {
+			s += ", Control disabled"
+		}
+	}
+	return s
+}
+
 func (d Device) String() string {
-	d.Lastupdateddatetime = d.Lastupdateddatetime.Local()
-	
-	s := fmt.Sprintf("%s at %s (id %d) is %s since %s",
-		d.Name, d.location, d.Myqdeviceid, d.Statename,
-		d.Lastupdateddatetime.Format(time.UnixDate))
-
-	if d.Error {
-		s += fmt.Sprintf(", ERROR: status = %s, message = %s", 
-			d.Errorstatus, d.Errormessage)
-	}
-	if d.Monitoronly {
-		s += ",Monitor Only"
-	}
-	if d.Lowbattery {
-		s += ", LowBat"
-	}
-	if d.Sensorerror {
-		s += ", Sensor Error"
-	}
-	if d.Openerror {
-		s += ", Open Error"
-	}
-	if d.Closeerror {
-		s += ", Close Error"
-	}
-	if d.Disablecontrol {
-		s += ", Control disabled"
-	}
-	return s
+	return d.print(false)
 }
 
-func (d Device) MachineString() string {
-	d.Lastupdateddatetime = d.Lastupdateddatetime.Local()
-	
-	s := fmt.Sprintf("%s,%s,%d,%s,%d,%s,%s", d.Name, d.location,
-		d.Myqdeviceid, d.Statename,
-		d.Lastupdateddatetime.Unix(), d.Errorstatus,
-		d.Errormessage)
-	if d.Monitoronly {
-		s += ",Monitor"
-	}
-	if d.Lowbattery {
-		s += ",LowBat"
-	}
-	if d.Sensorerror {
-		s += ",SensorErr"
-	}
-	if d.Openerror {
-		s += ",OpenErr"
-	}
-	if d.Closeerror {
-		s += ",CloseErr"
-	}
-	if d.Disablecontrol {
-		s += ",Disabled"
-	}
-	return s
-}
-
-func (f *MyQ) getAllGateways() (err error) {
+// MyQ REST API
+func (m *MyQ) getAllGateways() (err error) {
 	var j placeList
 
-	// The oonly option is a current timestamp in ms
+	// The only option is a current timestamp in ms
 	v := url.Values{}
 	v.Add("_", strconv.FormatInt(time.Now().UnixNano()/1000000, 10))
-	if err = f. doGet(_BaseURL + "Gateway/GetAllGateways", v, &j);
+	if err = m.doGet(_BaseURL + "Gateway/GetAllGateways", v, &j);
 	err != nil {
 		return err
 	}
 
 	// Convert the JSON array to a map
-	f.locations = make(places)
+	m.locations = make(places)
 	for _, p := range(j.P) {
-		f.locations[p.Gatewayid] = p
+		m.locations[p.Gatewayid] = p
 	}
 
 	return err
 }
 	
-func (f *MyQ) getAllDevices() (err error) {
+func (m *MyQ) getAllDevices() (err error) {
 	var d devices
 
-	if err = f.getAllGateways(); err != nil {
+	if err = m.getAllGateways(); err != nil {
 		return err
 	}
 
 	v := url.Values{}
-	v.Add("applicationId", f.applicationId)
-	v.Add("securityToken", f.securityToken)
+	v.Add("applicationId", m.applicationId)
+	v.Add("securityToken", m.securityToken)
 	v.Add("culture", _Culture)
 	v.Add("brandName", _BrandName)
-	if err = f.doGet(_BaseURL + "api/MyQDevices/GetAllDevices", v, &d);
+	if err = m.doGet(_BaseURL + "api/MyQDevices/GetAllDevices", v, &d);
 	err != nil {
 		return err
 	}
 
-	// Set the location for each device
+	// Fixup the json decoding.  This isn't an issue with the Go
+	// JSON parser but rather bugs/implementation details in the
+	// MyQ service (from what I can tell).
 	for i, x := range(d) {
-		d[i].location = f.locations[x.Gatewayid].Name
+		// Set the location for each device
+		d[i].location = m.locations[x.Gatewayid].Name
+		// Fix unknown doorstates
+		if d[i].Statename == "" {
+			d[i].Statename = "Unknown"
+		}
 	}
 
-	f.devices = d
+	m.devices = d
 	return nil
 }
 
-func (f *MyQ) setDoorState(d Device, desiredstate int) (err error) {
+func (m *MyQ) setDoorState(d Device, desiredstate int) (err error) {
 	var t triggerStateChangeReturn
 
-	f.debugf("SetDoorState: desiredstate = %d\n", desiredstate)
+	m.debugf("SetDoorState: desiredstate = %d\n", desiredstate)
 	if desiredstate != DesiredState_Open &&
 	   desiredstate != DesiredState_Closed {
 		return errors.New("Invalid door state")
@@ -295,39 +310,58 @@ func (f *MyQ) setDoorState(d Device, desiredstate int) (err error) {
 	v.Add("attributename", "desireddoorstate")
 	v.Add("attributevalue", strconv.Itoa(desiredstate))
 
-	err = f.doPost(_BaseURL + "Device/TriggerStateChange", v, t)
+	err = m.doPost(_BaseURL + "Device/TriggerStateChange", v, t)
 	if t.Errormessage != "" {
-		err = errors.New(t.Errormessage) 
-		return err
+		return errors.New(t.Errormessage) 
 	}
-
 	return err
 }
 
 // Find the SecurityToken and ApplicationID in the HTML response from login POST
 func findTokens(n *html.Node, securityToken *string, appID *string) (err error) {
-	if n.DataAtom == atom.Input && n.Type == html.ElementNode {
+	const badparse string = "__BADPARSE"
+	var parser func(n *html.Node, securityToken *string, appID *string)
+
+	*securityToken = badparse
+	*appID = badparse
+
+	parser = func (n *html.Node, securityToken *string, appID *string) {
+		if n.DataAtom == atom.Input && n.Type == html.ElementNode {
 		if n.Attr[0].Key == "type" && n.Attr[0].Val == "hidden" &&
 		   n.Attr[1].Key == "id" && n.Attr[1].Val == "securityToken" {
 		   *securityToken = n.Attr[2].Val
+			}
+		}
+	
+		if n.DataAtom == atom.Input && n.Type == html.ElementNode {
+			if n.Attr[0].Key == "type" &&
+				n.Attr[0].Val == "hidden"&&
+				n.Attr[1].Key == "id" && 
+				n.Attr[1].Val == "ApplicationId" {
+				*appID = n.Attr[2].Val
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			parser(c, securityToken, appID)
 		}
 	}
 
-	if n.DataAtom == atom.Input && n.Type == html.ElementNode {
-		if n.Attr[0].Key == "type" && n.Attr[0].Val == "hidden"&&
-			n.Attr[1].Key == "id" && 
-			n.Attr[1].Val == "ApplicationId" {
-			*appID = n.Attr[2].Val
+	parser(n, securityToken, appID)
+	
+	if *securityToken == badparse && *appID == badparse {
+		err = errors.New("Can't find either securityToken or appID in response")
+	} else {
+		if *securityToken == badparse {
+			err = errors.New("Can't find securityToken in response")
+		} else if *appID == badparse {
+			err = errors.New("Can't find AppID in response")
 		}
 	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		findTokens(c, securityToken, appID)
-	}
-	// TODO: Need to make sure that BOTH are set, otherwise return an error
+	
 	return err
 }
 
-func (f *MyQ) login(username string, password string) (err error) {
+func (m *MyQ) login(username string, password string) (err error) {
 	var resp *http.Response
 	var doc *html.Node
 
@@ -336,37 +370,24 @@ func (f *MyQ) login(username string, password string) (err error) {
 	v.Add("Email", username)
 	v.Add("Password", password)
 	
-	if f.c.Jar, err = cookiejar.New(nil); err != nil {
+	if m.c.Jar, err = cookiejar.New(nil); err != nil {
 		return fmt.Errorf("login(): Can't create CookieJar: %s", err)
 	}
-	f.c.Timeout = 60 * time.Second
+	m.c.Timeout = 60 * time.Second
 
 	// This post needs to be done by hand, as the resulting HTML
 	// needs to be parsed.
-	if resp, err = f.doPostRaw(_BaseURL, v); err != nil {
+	if resp, err = m.doPostRaw(_BaseURL, v); err != nil {
 		return fmt.Errorf("Post() failed: %s\n", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP Error: %s\n", resp.Status)
-	}
-	
+	}	
 	if doc, err = html.Parse(resp.Body); err != nil {
 		return err
 	}
 
-	err = findTokens(doc, &f.securityToken, &f.applicationId)
-	if f.securityToken == "" {
-		return errors.New("Can't find securityToken in login response")
-	}
-	if f.applicationId == "" {
-		return errors.New("Can't find applicationId in login response")
-	}
-
-	return err
-}
-
-func (p *place) string() string {
-	return fmt.Sprintf("%s (ID %d)", p.Name, p.Gatewayid)
+	return findTokens(doc, &m.securityToken, &m.applicationId)
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -377,11 +398,13 @@ func (m *MyQ) New(username string, password string, debug bool,
 	m.machineReadable = machineReadable 
 
 	if err = m.login(username, password); err != nil {
-		return err
+		m.debugf("login error: %s", err)
+		return errors.New("Login failed")
 	}
 	
 	if err = m.getAllDevices(); err != nil {
-		return err
+		m.debugf("getAllDevices() error: %s", err)
+		return errors.New("Can't get device list")
 	}
 
 	return err
@@ -393,79 +416,53 @@ func (m *MyQ) FindDoorByName(name string) (d Device, err error) {
 			return d, nil
 		}
 	}
-	
 	return d, fmt.Errorf("Device named '%s' not found", name)
-}
-
-
-func (m *MyQ) Update() error {
-	return m.getAllDevices()
 }
 
 func (m *MyQ) ShowDoors() {
 	for _, d := range m.devices {
-		if m.machineReadable {
-			fmt.Println(d.MachineString())
-		} else {
-			fmt.Println(d)
-		}
+		fmt.Println(d.print(m.machineReadable))
 	}
 }
 
 func (m *MyQ) ShowLocations() {
 	for _, x := range m.locations {
-		if m.machineReadable {
-			fmt.Printf("%s,%d\n", x.Name, x.Gatewayid)
-		} else {
-			fmt.Println(x.string())
-		}
+		fmt.Println(x.print(m.machineReadable))
 	}
 }
 
-func (m *MyQ) DoorDetails(d Device) string {
-	if m.machineReadable {
-		return d.MachineString()
-	} else {
-		return d.String()
-	}
+func (m *MyQ) DoorDetails(d Device){
+	fmt.Println(d.print(m.machineReadable))
 }
 
-func (m *MyQ) GetState(d Device) string {
-	return d.Statename
+func (m *MyQ) GetState(d Device) {
+	fmt.Println(d.Statename)
 }
 	
 func (m *MyQ) Open(d Device) error {
-	state := m.GetState(d)
-	if state == "Open" {
-		return errors.New("Can't open, door is already open")
+	if d.Statename == "Open" {
+		return errors.New("Door is already open")
+	} else if d.Statename != "Closed" {
+		return fmt.Errorf("Can't open, door is currently %s",
+			d.Statename)
 	}
-	if state != "Closed" {
-		return fmt.Errorf("Can't open, door is %s", state)
-	}
-
 	return m.setDoorState(d, DesiredState_Open)
 }	
 
 func (m *MyQ) Close(d Device) error {
-	state := m.GetState(d)
-	if state == "Closed" {
+	if d.Statename == "Closed" {
 		return errors.New("Door already closed")
+	} else if d.Statename != "Open" {
+		return fmt.Errorf("Can't close, door is currently %s",
+			d.Statename)
 	}
-	if state != "Open" {
-		return fmt.Errorf("Can't close, door is %s", state)
-	}
-
 	return m.setDoorState(d, DesiredState_Closed)
 }	
 
 func (m *MyQ) ShowByState(s string) {
 	for _, d := range m.devices {
 		if d.Statename == s {
-			if m.machineReadable {
-				fmt.Println(d.MachineString())
-			} else {
-				fmt.Println(d)
-			}
+			fmt.Println(d.print(m.machineReadable))
 		}
 	}
 }

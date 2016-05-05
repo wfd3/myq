@@ -65,13 +65,13 @@ func main() {
 			fmt.Printf("Error: %s\n", err)
 			os.Exit(1)
 		}
-		fmt.Println(m.GetState(d))
+		m.GetState(d)
 	case "details": 
 		if d, err = m.FindDoorByName(door); err != nil {
 			fmt.Printf("Error: %s\n", err)
 			os.Exit(1)
 		}
-		fmt.Println(m.DoorDetails(d))
+		m.DoorDetails(d)
 	case "open": 
 		if d, err = m.FindDoorByName(door); err != nil {
 			fmt.Printf("Error: %s\n", err)
