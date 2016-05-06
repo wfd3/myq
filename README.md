@@ -5,8 +5,6 @@ A library and tool in Go to control LiftMaster MyQ-enabled openers.  Reverse eng
 ##PACKAGE DOCUMENTATION
 
 package myq
-    import "myq"
-
 
 TYPES
 
@@ -14,6 +12,7 @@ TYPES
         // contains filtered or unexported fields
     }
 
+###Functions:
     func (m *MyQ) Close(d Device) error
 Close a specific door/device
 
