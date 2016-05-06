@@ -60,3 +60,9 @@ Show all locations associated with this MyQ account
       listopen - list all open doors
       listclosed - list all closed doors
 
+The `user` and `password` options can be specified in a configuration file, located at ~/.config/myqt/config.ini.  Parameters are:
+```
+    user = <username>
+    password = <password>
+```
+The `-user` and `-password` command line options override the configuration file.
