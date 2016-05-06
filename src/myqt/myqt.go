@@ -11,8 +11,6 @@ import (
 func usage() {
 	fmt.Printf("%s: Control Liftmaster MyQ enabled doors\n",
 		os.Args[0])
-	fmt.Println("\tUsername and password options (-u & -p) are required")
-	fmt.Println()
 	flag.PrintDefaults()
 	fmt.Println()
 	fmt.Println("  help - this message")

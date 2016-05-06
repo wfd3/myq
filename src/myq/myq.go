@@ -21,8 +21,8 @@ var _BrandName = "LiftMaster"
 
 // Desired state (ie, I want the door to open)
 const (
-	DesiredState_Closed = 0
-	DesiredState_Open   = 1
+	desiredState_Closed = 0
+	desiredState_Open   = 1
 )
 
 type devices []Device
@@ -300,8 +300,8 @@ func (m *MyQ) setDoorState(d Device, desiredstate int) (err error) {
 	var t triggerStateChangeReturn
 
 	m.debugf("SetDoorState: desiredstate = %d\n", desiredstate)
-	if desiredstate != DesiredState_Open &&
-	   desiredstate != DesiredState_Closed {
+	if desiredstate != desiredState_Open &&
+	   desiredstate != desiredState_Closed {
 		return errors.New("Invalid door state")
 	}
 
@@ -391,7 +391,9 @@ func (m *MyQ) login(username string, password string) (err error) {
 }
 
 ////////////////////////////////////////////////////////////////////////////
-// PublicAPI
+// Public API
+
+// Create a new MyQ Session
 func (m *MyQ) New(username string, password string, debug bool,
 	machineReadable bool) (err error) {
 	m.debug = debug
@@ -410,6 +412,7 @@ func (m *MyQ) New(username string, password string, debug bool,
 	return err
 }
 
+// Find a device/door by its name
 func (m *MyQ) FindDoorByName(name string) (d Device, err error) {
 	for _, d = range m.devices {
 		if d.Name == name {
@@ -419,26 +422,31 @@ func (m *MyQ) FindDoorByName(name string) (d Device, err error) {
 	return d, fmt.Errorf("Device named '%s' not found", name)
 }
 
+// Show all devices/doors
 func (m *MyQ) ShowDoors() {
 	for _, d := range m.devices {
 		fmt.Println(d.print(m.machineReadable))
 	}
 }
 
+// Show all locations associated with this MyQ account
 func (m *MyQ) ShowLocations() {
 	for _, x := range m.locations {
 		fmt.Println(x.print(m.machineReadable))
 	}
 }
 
+// Show details & current state for a specific door/device
 func (m *MyQ) DoorDetails(d Device){
 	fmt.Println(d.print(m.machineReadable))
 }
 
+// Show the state (open, closed, ... ) of a specfic door/device
 func (m *MyQ) GetState(d Device) {
 	fmt.Println(d.Statename)
 }
-	
+
+// Open a specific door/device
 func (m *MyQ) Open(d Device) error {
 	if d.Statename == "Open" {
 		return errors.New("Door is already open")
@@ -446,9 +454,10 @@ func (m *MyQ) Open(d Device) error {
 		return fmt.Errorf("Can't open, door is currently %s",
 			d.Statename)
 	}
-	return m.setDoorState(d, DesiredState_Open)
+	return m.setDoorState(d, desiredState_Open)
 }	
 
+// Close a specific door/device
 func (m *MyQ) Close(d Device) error {
 	if d.Statename == "Closed" {
 		return errors.New("Door already closed")
@@ -456,12 +465,13 @@ func (m *MyQ) Close(d Device) error {
 		return fmt.Errorf("Can't close, door is currently %s",
 			d.Statename)
 	}
-	return m.setDoorState(d, DesiredState_Closed)
+	return m.setDoorState(d, desiredState_Closed)
 }	
 
-func (m *MyQ) ShowByState(s string) {
+// Show devices currently in state /state/ (Open, Closed, ... )
+func (m *MyQ) ShowByState(state string) {
 	for _, d := range m.devices {
-		if d.Statename == s {
+		if d.Statename == state {
 			fmt.Println(d.print(m.machineReadable))
 		}
 	}
