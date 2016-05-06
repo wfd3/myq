@@ -400,12 +400,12 @@ func (m *MyQ) New(username string, password string, debug bool,
 	m.machineReadable = machineReadable 
 
 	if err = m.login(username, password); err != nil {
-		m.debugf("login error: %s", err)
+		m.debugf("login error: %s\n", err)
 		return errors.New("Login failed")
 	}
 	
 	if err = m.getAllDevices(); err != nil {
-		m.debugf("getAllDevices() error: %s", err)
+		m.debugf("getAllDevices() error: %s\n", err)
 		return errors.New("Can't get device list")
 	}
 
