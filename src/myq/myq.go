@@ -10,9 +10,7 @@ import (
 	"net/url"
 	"time"
 	"os"
-	"golang.org/x/net/html"
 	"net/http/cookiejar"
-	"golang.org/x/net/html/atom"
 )
 
 var _Culture string = "en-US"	
@@ -85,8 +83,6 @@ type place struct {
 
 type MyQ struct {
 	c http.Client
-	securityToken string
-	applicationId string
 	devices devices
 	locations places
 	debug bool
@@ -271,8 +267,6 @@ func (m *MyQ) getAllDevices() (err error) {
 	}
 
 	v := url.Values{}
-	v.Add("applicationId", m.applicationId)
-	v.Add("securityToken", m.securityToken)
 	v.Add("culture", _Culture)
 	v.Add("brandName", _BrandName)
 	if err = m.doGet(_BaseURL + "api/MyQDevices/GetAllDevices", v, &d);
@@ -317,55 +311,9 @@ func (m *MyQ) setDoorState(d Device, desiredstate int) (err error) {
 	return err
 }
 
-// Find the SecurityToken and ApplicationID in the HTML response from login POST
-func findTokens(n *html.Node, securityToken *string, appID *string) (err error) {
-	const badparse string = "__BADPARSE"
-	var parser func(n *html.Node, securityToken *string, appID *string)
-
-	*securityToken = badparse
-	*appID = badparse
-
-	parser = func (n *html.Node, securityToken *string, appID *string) {
-		if n.DataAtom == atom.Input && n.Type == html.ElementNode {
-		if n.Attr[0].Key == "type" && n.Attr[0].Val == "hidden" &&
-		   n.Attr[1].Key == "id" && n.Attr[1].Val == "securityToken" {
-		   *securityToken = n.Attr[2].Val
-			}
-		}
-	
-		if n.DataAtom == atom.Input && n.Type == html.ElementNode {
-			if n.Attr[0].Key == "type" &&
-				n.Attr[0].Val == "hidden"&&
-				n.Attr[1].Key == "id" && 
-				n.Attr[1].Val == "ApplicationId" {
-				*appID = n.Attr[2].Val
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			parser(c, securityToken, appID)
-		}
-	}
-
-	parser(n, securityToken, appID)
-	
-	if *securityToken == badparse && *appID == badparse {
-		err = errors.New("Can't find either securityToken or appID in response")
-	} else {
-		if *securityToken == badparse {
-			err = errors.New("Can't find securityToken in response")
-		} else if *appID == badparse {
-			err = errors.New("Can't find AppID in response")
-		}
-	}
-	
-	return err
-}
-
 func (m *MyQ) login(username string, password string) (err error) {
 	var resp *http.Response
-	var doc *html.Node
 
-	err = nil
 	v := url.Values{}
 	v.Add("Email", username)
 	v.Add("Password", password)
@@ -383,11 +331,7 @@ func (m *MyQ) login(username string, password string) (err error) {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP Error: %s\n", resp.Status)
 	}	
-	if doc, err = html.Parse(resp.Body); err != nil {
-		return err
-	}
-
-	return findTokens(doc, &m.securityToken, &m.applicationId)
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -400,12 +344,12 @@ func (m *MyQ) New(username string, password string, debug bool,
 	m.machineReadable = machineReadable 
 
 	if err = m.login(username, password); err != nil {
-		m.debugf("login error: %s\n", err)
+		m.debugf("login error: %s", err)
 		return errors.New("Login failed")
 	}
 	
 	if err = m.getAllDevices(); err != nil {
-		m.debugf("getAllDevices() error: %s\n", err)
+		m.debugf("getAllDevices() error: %s", err)
 		return errors.New("Can't get device list")
 	}
 
