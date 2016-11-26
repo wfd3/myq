@@ -58,8 +58,6 @@ func main() {
 	}
 	conf.ParseAll()
 	
-	
-
 	if err := m.New(username, password, debug, machine_parsable); err != nil {
 		fmt.Printf("Error: %s\n", err);
 		os.Exit(1)
