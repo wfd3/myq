@@ -128,9 +128,9 @@ func (m *MyQ) doGet(rawurl string, v url.Values, s interface{}) (err error) {
 	return json.Unmarshal(r, &s)
 }
 
-// Do a HTTPS POST but don't try to JSON-parse the result.
-func (m *MyQ) doPostRaw(rawurl string, v url.Values) (res *http.Response,
-	err error) {
+// Do a HTTPS POST and unmarshal the JSON result, if we're expecting a result (ie, s != nil)
+func (m *MyQ) doPost(rawurl string, v url.Values, s interface{}) (err error) {
+	var res *http.Response
 
 	if m.debug {
 		u, _ := url.Parse(rawurl)
@@ -140,28 +140,21 @@ func (m *MyQ) doPostRaw(rawurl string, v url.Values) (res *http.Response,
 	t := time.Now()
 	if res, err = m.c.PostForm(rawurl, v); err != nil {
 		m.debugf("Post() failed: %s\n", err)
-		return nil, err
+		return err
 	}
 	d := time.Since(t)
 	m.debugf("   HTTP Response: %s, in %s\n", res.Status, d)
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP Error: %s", res.Status)
+		return fmt.Errorf("HTTP Error: %s", res.Status)
 	}
 
-	return res, nil
-}
-
-// Do a HTTPS POST and unmarshal the JSON result (wrapper around doPostRaw)
-func (m *MyQ) doPost(rawurl string, v url.Values, s interface{}) (err error) {
-	var res *http.Response
-
-	if res, err = m.doPostRaw(rawurl, v); err != nil {
-		return err
-	}
 	r, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
 
-	return json.Unmarshal(r, &s)
+	if s != nil {
+		return json.Unmarshal(r, &s)
+	}
+	return nil
 }
 
 // Functions to handle type place
@@ -312,7 +305,6 @@ func (m *MyQ) setDoorState(d Device, desiredstate int) (err error) {
 }
 
 func (m *MyQ) login(username string, password string) (err error) {
-	var resp *http.Response
 
 	v := url.Values{}
 	v.Add("Email", username)
@@ -323,14 +315,9 @@ func (m *MyQ) login(username string, password string) (err error) {
 	}
 	m.c.Timeout = 60 * time.Second
 
-	// This post needs to be done by hand, as the resulting HTML
-	// needs to be parsed.
-	if resp, err = m.doPostRaw(_BaseURL, v); err != nil {
+	if  err = m.doPost(_BaseURL, v, nil); err != nil {
 		return fmt.Errorf("Post() failed: %s\n", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP Error: %s\n", resp.Status)
-	}	
 	return nil
 }
 
