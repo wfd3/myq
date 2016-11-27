@@ -1,6 +1,6 @@
 # myq
 
-A library and tool in Go to control LiftMaster MyQ-enabled openers.  Reverse engineered from the LiftMaster Web app.  
+A library and tool in Go to control LiftMaster MyQ-enabled openers.  Reverse engineered from the LiftMaster Web app.  Updated 26-Nov-2016 to conform to the current app API.
 
 ##PACKAGE DOCUMENTATION
 
