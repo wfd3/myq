@@ -205,9 +205,9 @@ func (d Device) print(machinereadable bool) string {
 			s += ",Disabled"
 		}
 	} else {
-		s = fmt.Sprintf("%s at %s is %s since %s",
+		s = fmt.Sprintf("%s at %s is %s since %v",
 			d.Name, d.location, d.Statename,
-			d.Lastupdateddatetime.Format(time.UnixDate))
+			d.Lastupdateddatetime.Format(time.Stamp))
 		if d.Error {
 			s += fmt.Sprintf(", ERROR: status = %s, message = %s", 
 				d.Errorstatus, d.Errormessage)
